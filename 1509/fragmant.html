@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <title>Vertex Shader • pos.z = sin(pos.x*PI + uTime) (three.js r128)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>html,body{height:100%;margin:0} canvas{display:block}</style>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+<script>
+  // Scene / Camera / Renderer
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+
+  const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
+  camera.position.set(0, 0.6, 2.2);
+
+  const renderer = new THREE.WebGLRenderer({ antialias:true });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  document.body.appendChild(renderer.domElement);
+
+  new THREE.OrbitControls(camera, renderer.domElement);
+  //ใส่แกน
+  const axes = new THREE.AxesHelper(2.0);
+  scene.add(axes);
+  
+  const uniforms = { 
+    uTime: { value: 0.0 } ,
+    uLightDir: { value: new THREE.Vector3(0.4,1.0,0.8).normalize() }
+  };
+
+  const vert = `
+    uniform float uTime;
+    varying vec3 vNormal;
+    varying vec3 vPosW;
+
+    void main(){
+      vNormal = normalize(mat3(modelMatrix) * normal);    //แปลงเป็น world space ก่อน โดยเอา modelMatrix ไปตูณ
+      vec3 pos = position;
+      vPosW   = ( modelMatrix * vec4(pos, 1.0)).xyz;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+    }
+  `;
+
+  const frag = `
+    precision mediump float;
+    uniform vec3 uLightDir;
+    varying vec3 vNormal;
+    varying vec3 vPosW;
+    void main()
+    {
+      //lambert (diffuse)
+      float diffuse = dot(vNormal, uLightDir);   
+      diffuse = clamp(diffuse, 0.3, 1.0);
+
+      //phong (specular)
+      vec3 R = reflect(-uLightDir, vNormal);   //ติดลบเพื่อให้ได้เส้นที่มาจากแหล่งกำเนิดแสง
+      vec3 V = normalize(cameraPosition - vPosW);
+
+      float specular = pow(dot(R,V), 9.0);   //ให้มันปิ๊งวับ    //pow ยกกำลัง2
+      specular = clamp(specular, 0.0, 0.2);
+      if(diffuse <= 0.3) specular=0.0;
+
+
+      gl_FragColor = (vec4(1.0, 1.0, 0.5, 1.0) * diffuse) + vec4(specular);
+    }
+  `;
+
+  const geo = new THREE.TorusBufferGeometry(0.7, 0.2, 160, 240);
+  //const geo = new THREE.SphereBufferGeometry(1, 200, 200);
+  //const geo = new THREE.PlaneBufferGeometry(2.0, 2.0, 20, 20);
+  const mat = new THREE.ShaderMaterial({
+    vertexShader: vert,
+    fragmentShader: frag,
+    uniforms,
+    //wireframe: true
+  });
+
+  scene.add(new THREE.Mesh(geo, mat));
+
+
+    const geoGround = new THREE.PlaneBufferGeometry(10.0, 2.0, 100, 20);
+    const matGround = new THREE.MeshBasicMaterial({
+      color: 0x444444,
+      wireframe: true
+    });
+    const mshGround = new THREE.Mesh(geoGround, matGround);
+    mshGround.rotation.x = Math.PI * -0.5;
+    scene.add(mshGround);
+
+    const sphere = new THREE.SphereBufferGeometry(0.05, 20, 20);
+    const matSphere = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    const mshSphere = new THREE.Mesh(sphere, matSphere);
+    mshSphere.position.set(0, 0, 0);
+    scene.add(mshSphere);
+
+  // Resize & Animate
+  addEventListener('resize', ()=>{
+    camera.aspect = innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  (function loop(){
+    uniforms.uTime.value = performance.now() / 1000; // ปรับความเร็วได้ด้วยการคูณ factor
+    uniforms.uLightDir.value.set(
+      Math.sin(uniforms.uTime.value)*2.0,
+      //0.4,
+      1.0,
+      0.8
+    ).normalize();
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  })();
+</script>
+</body>
+</html>
