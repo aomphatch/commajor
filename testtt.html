@@ -1,0 +1,427 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Interactive 3D Scene</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    canvas { cursor: pointer; display:block; }
+  </style>
+</head>
+<body>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { EXRLoader } from 'three/addons/loaders/EXRLoader.js';
+
+// --- Renderer ---
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
+document.body.appendChild(renderer.domElement);
+
+// --- Scene ---
+const scene = new THREE.Scene();
+
+// --- Camera + Controls ---
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(4.659418992294957, 1.424070324380362, 15.88781432714412);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.enableZoom = true;
+controls.enablePan = true;
+controls.minDistance = 0.2;
+controls.maxDistance = 100;
+
+// --- HDRI Environment ---
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+pmremGenerator.compileEquirectangularShader();
+
+new EXRLoader()
+  .setDataType(THREE.FloatType)
+  .load(
+    'https://nathichab300147.github.io/Interactive3DPortfolio/kloppenheim_06_puresky_1k.exr',
+    tex => {
+      const envMap = pmremGenerator.fromEquirectangular(tex).texture;
+      scene.environment = envMap;
+      tex.mapping = THREE.EquirectangularReflectionMapping;
+      scene.background = tex;
+    },
+    undefined,
+    err => console.error('EXR load error:', err)
+  );
+
+// --- Lighting ---
+const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+scene.add(ambient);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+dirLight.position.set(70, 100, 70);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.set(1024, 1024);
+dirLight.shadow.camera.far = 200;
+scene.add(dirLight);
+
+// --- GLTF Loader ---
+const gltfLoader = new GLTFLoader();
+function loadGLB(url) {
+  return new Promise((resolve, reject) => {
+    gltfLoader.load(url, gltf => resolve(gltf.scene), undefined, reject);
+  });
+}
+
+// --- Cell shader (for TheLittlePrince) ---
+const cellUniforms = {
+  uTime: { value: 0.0 },
+  uLightDir: { value: new THREE.Vector3(0.4, 1.0, 0.8).normalize() },
+  uTex: { value: null }
+};
+
+const cellVert = `uniform float uTime;
+varying vec3 vNormal;
+varying vec3 vPosW;
+varying vec2 vUv;
+void main(){
+  vNormal = normalize(mat3(modelMatrix) * normal);
+  vec3 pos = position;
+  vUv = uv;
+  vPosW = ( modelMatrix * vec4(pos, 1.0)).xyz;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+}`;
+
+const cellFrag = `precision mediump float;
+varying vec3 vNormal;
+uniform vec3 uLightDir;
+varying vec3 vPosW;
+varying vec2 vUv;
+uniform sampler2D uTex;
+void main() {
+  float diffuse = clamp(dot(vNormal, uLightDir), 0.0, 1.0);
+  float levels = 3.0;
+  diffuse = floor(diffuse * levels) / levels;
+  diffuse += 0.3;
+  vec3 R = reflect(-uLightDir, vNormal);
+  vec3 V = normalize(cameraPosition - vPosW);
+  float specular = max( pow( dot(R,V), 8.0 ) , 0.0);
+  specular = smoothstep(0.4, 0.6, specular);
+  specular = clamp(specular, 0.0, 0.5);
+  if(diffuse <= 0.5) specular = 0.0;
+  vec3 base = texture2D(uTex, vUv).rgb;
+  vec3 color = (base * diffuse) + vec3(specular);
+  gl_FragColor = vec4(color, 1.0);
+}`;
+
+// Collect created cell materials so we can update uniforms.uTime each frame
+const _cellMaterials = [];
+
+// --- Raycaster & interaction state ---
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+const interactables = [];
+
+function addClickable(mesh, name) {
+  mesh.name = name;
+  interactables.push(mesh);
+  return mesh;
+}
+
+function setPointer(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  const x = (e.clientX ?? (e.touches && e.touches[0] && e.touches[0].clientX)) - r.left;
+  const y = (e.clientY ?? (e.touches && e.touches[0] && e.touches[0].clientY)) - r.top;
+  pointer.x = (x / r.width) * 2 - 1;
+  pointer.y = -(y / r.height) * 2 + 1;
+}
+
+// --- Camera move/tween ---
+const cameraMove = {
+  active: false,
+  fromPos: new THREE.Vector3(),
+  toPos: new THREE.Vector3(),
+  fromTarget: new THREE.Vector3(),
+  toTarget: new THREE.Vector3(),
+  startTime: 0,
+  duration: 1.0
+};
+
+function startCameraMove(toPos, toTarget, durationSec = 1.0) {
+  cameraMove.active = true;
+  cameraMove.fromPos.copy(camera.position);
+  cameraMove.toPos.copy(toPos);
+  cameraMove.fromTarget.copy(controls.target);
+  cameraMove.toTarget.copy(toTarget);
+  cameraMove.startTime = performance.now();
+  cameraMove.duration = durationSec;
+}
+
+// --- Pick handler ---
+function onPick(e) {
+  setPointer(e);
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(interactables, true);
+  if (hits.length === 0) return;
+
+  let obj = hits[0].object;
+  // climb up to the interactable parent (in case mesh is a child)
+  while (obj && !interactables.includes(obj)) { obj = obj.parent; }
+  if (!obj) return;
+
+  const view = VIEWS[obj.name];
+  if (!view) {
+    console.log('Picked but no view defined for:', obj.name);
+    return;
+  }
+
+  if (view.fit) {
+    let root = obj;
+    while (root.parent && root.parent.type !== 'Scene') root = root.parent;
+    const bbox = new THREE.Box3().setFromObject(root);
+    const sphere = bbox.getBoundingSphere(new THREE.Sphere());
+    const center = sphere.center;
+    const radius = sphere.radius;
+    const camDir = camera.position.clone().sub(center).normalize();
+    const fitFactor = view.fitFactor ?? 2.0;
+    const fitPos = center.clone().add(camDir.multiplyScalar(radius * fitFactor));
+    startCameraMove(fitPos, center.clone(), view.duration ?? 1.0);
+    return;
+  }
+
+  startCameraMove(view.pos.clone(), view.tar.clone(), view.duration ?? 1.0);
+}
+
+renderer.domElement.addEventListener('click', onPick);
+renderer.domElement.addEventListener('touchend', e => { e.preventDefault(); onPick(e); }, { passive: false });
+renderer.domElement.addEventListener('pointerdown', e => { /* optional: pointer feedback */ });
+
+// --- Models ---
+let VIEWS = {};
+let tag1, tag2, tag3, welcome, credit;
+let tagblue2_1, tagpink3_1, back1, tagyell1_2, tagpink3_2, back2, tagyell1_3, tagblue2_3, back3;
+
+async function init() {
+  const modelURLs = [
+    'Carnivaltent.glb','Ferriswheel.glb','carousel%20.glb','entrancearch.glb','fence.glb',
+    'floor_1.glb','floor_2.glb','location_1.glb','location_2.glb','location_3.glb',
+    'monument.glb','sky.glb','train.glb','tree_1.glb','tree_2.glb','tree_3.glb',
+    'tree_4.glb','tree_5.glb','tree_6.glb','tree_7.glb','tree_8.glb','tree_9.glb',
+    'shoppingcart_1.glb','shoppingcart_2.glb','trainticket.glb','glassball.glb',
+    'tag_1.glb','tag_2.glb','tag_3.glb','midtag.glb','TheLittlePrince.glb',
+    '1toleft.glb','2toback.glb','3toright.glb','card.glb',
+    'welcome.glb','credit.glb',
+    'tagblue2_1.glb','tagpink3_1.glb','back1.glb',
+    'tagyell1_2.glb','tagpink3_2.glb','back2.glb',
+    'tagyell1_3.glb','tagblue2_3.glb','back3.glb'
+  ];
+
+  for (const url of modelURLs) {
+    try {
+      const model = await loadGLB(`https://nathichab300147.github.io/Interactive3DPortfolio/${url}`);
+      model.traverse(child => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+      scene.add(model);
+
+      // store references for specific names
+      if (url === 'tag_1.glb') tag1 = model;
+      if (url === 'tag_2.glb') tag2 = model;
+      if (url === 'tag_3.glb') tag3 = model;
+      if (url === 'welcome.glb') welcome = model;
+      if (url === 'credit.glb') credit = model;
+      if (url === 'tagblue2_1.glb') tagblue2_1 = model;
+      if (url === 'tagpink3_1.glb') tagpink3_1 = model;
+      if (url === 'back1.glb') back1 = model;
+      if (url === 'tagyell1_2.glb') tagyell1_2 = model;
+      if (url === 'tagpink3_2.glb') tagpink3_2 = model;
+      if (url === 'back2.glb') back2 = model;
+      if (url === 'tagyell1_3.glb') tagyell1_3 = model;
+      if (url === 'tagblue2_3.glb') tagblue2_3 = model;
+      if (url === 'back3.glb') back3 = model;
+
+      // If this is TheLittlePrince, replace mesh materials with cell shader
+      if (url === 'TheLittlePrince.glb') {
+        model.traverse(child => {
+          if (child.isMesh) {
+            const origMap = (child.material && child.material.map) ? child.material.map : null;
+            const mat = new THREE.ShaderMaterial({
+              vertexShader: cellVert,
+              fragmentShader: cellFrag,
+              uniforms: {
+                uTime: cellUniforms.uTime,
+                uLightDir: cellUniforms.uLightDir,
+                uTex: { value: origMap }
+              }
+            });
+            child.material = mat;
+            _cellMaterials.push(mat);
+          }
+        });
+      }
+
+      // register clickable meshes for known models
+      model.traverse(child => {
+        if (child.isMesh) {
+          // list of names to register (key must match keys in VIEWS below)
+          const registerMap = {
+            'tag_1.glb': 'tag_1',
+            'tag_2.glb': 'tag_2',
+            'tag_3.glb': 'tag_3',
+            'welcome.glb': 'welcome',
+            'credit.glb': 'credit',
+            'tagblue2_1.glb': 'tagblue2_1',
+            'tagpink3_1.glb': 'tagpink3_1',
+            'back1.glb': 'back1',
+            'tagyell1_2.glb': 'tagyell1_2',
+            'tagpink3_2.glb': 'tagpink3_2',
+            'back2.glb': 'back2',
+            'tagyell1_3.glb': 'tagyell1_3',
+            'tagblue2_3.glb': 'tagblue2_3',
+            'back3.glb': 'back3'
+          };
+          const key = registerMap[url];
+          if (key) addClickable(child, key);
+        }
+      });
+
+    } catch (err) {
+      // continue loading others even if one fails
+      console.error('Failed loading model:', url, err);
+    }
+  }
+  // --- Heightmap plane (displaced vertex shader) ---
+const hmUniforms = {
+  uTime: { value: 0.0 },
+  uHeight: { value: null }
+};
+window.hmUniforms = hmUniforms; // <--- เพิ่มบรรทัดนี้!
+
+const hmVert = `
+uniform sampler2D uHeight;
+uniform float uTime;
+varying float vH;
+void main(){
+  vec3 pos = position;
+  float h = texture2D(uHeight, uv).r;
+  pos.z += h * 2.0 + sin(uTime * 2.0 + h * 10.0) * 0.2;
+  vH = h;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+}
+`;
+
+const hmFrag = `
+precision mediump float;
+varying float vH;
+void main(){
+  vec3 col = mix(vec3(0.1,0.1,0.5), vec3(0.8,0.9,1.0), vH);
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+new THREE.TextureLoader().load(
+  'https://upload.wikimedia.org/wikipedia/commons/5/57/Heightmap.png',
+  (tex) => {
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    hmUniforms.uHeight.value = tex;
+    const aspect = tex.image.width / tex.image.height;
+    const geo = new THREE.PlaneBufferGeometry(400, 400/aspect, 200, 200); // <--- ขยายใหญ่ 10 เท่า
+    const mat = new THREE.ShaderMaterial({
+      vertexShader: hmVert,
+      fragmentShader: hmFrag,
+      uniforms: hmUniforms,
+      side: THREE.DoubleSide
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(0,2,0);
+    mesh.rotation.x = -Math.PI / 2;
+    scene.add(mesh);
+  }
+);
+
+  // --- Predefined camera views (adjust these if you want different framing) ---
+  VIEWS = {
+    tag_1: { pos: new THREE.Vector3(-5.36, 1.06, 3.63), tar: new THREE.Vector3(-5.36, 1.06, 3.63) },
+    tag_2: { pos: new THREE.Vector3(1.09, 1.16, 1.28), tar: new THREE.Vector3(1.09, 1.16, 1.28) },
+    tag_3: { pos: new THREE.Vector3(3.56, 1.29, 3.27), tar: new THREE.Vector3(3.56, 1.29, 3.27) },
+    welcome: { pos: new THREE.Vector3(-0.16, 1.55, 5.43), tar: new THREE.Vector3(-0.16, 1.55, 5.43) },
+    credit: { pos: new THREE.Vector3(2.60, -13.56, -6.77), tar: new THREE.Vector3(2.60, -13.56, -6.77) },
+    tagblue2_1: { pos: new THREE.Vector3(1.09, 1.16, 1.28), tar: new THREE.Vector3(1.09, 1.16, 1.28) },
+    tagpink3_1: { pos: new THREE.Vector3(3.56, 1.29, 3.27), tar: new THREE.Vector3(3.56, 1.29, 3.27) },
+    back1: { pos: new THREE.Vector3(-0.16, 1.55, 5.43), tar: new THREE.Vector3(-0.16, 1.55, 5.43) },
+    tagyell1_2: { pos: new THREE.Vector3(-5.36, 1.06, 3.63), tar: new THREE.Vector3(-5.36, 1.06, 3.63) },
+    tagpink3_2: { pos: new THREE.Vector3(3.56, 1.29, 3.27), tar: new THREE.Vector3(3.56, 1.29, 3.27) },
+    back2: { pos: new THREE.Vector3(-0.16, 1.55, 5.43), tar: new THREE.Vector3(-0.16, 1.55, 5.43) },
+    tagyell1_3: { pos: new THREE.Vector3(-5.36, 1.06, 3.63), tar: new THREE.Vector3(-5.36, 1.06, 3.63) },
+    tagblue2_3: { pos: new THREE.Vector3(1.09, 1.16, 1.28), tar: new THREE.Vector3(1.09, 1.16, 1.28) },
+    back3: { pos: new THREE.Vector3(-0.16, 1.55, 5.43), tar: new THREE.Vector3(-0.16, 1.55, 5.43) }
+  };
+}
+
+init();
+
+// --- Animation loop ---
+function animate() {
+  requestAnimationFrame(animate);
+
+  if (cameraMove.active) {
+    const now = performance.now();
+    let t = Math.min(1, (now - cameraMove.startTime) / (cameraMove.duration * 1000));
+    t = t * t * (3 - 2 * t); // smoothstep
+
+    camera.position.lerpVectors(cameraMove.fromPos, cameraMove.toPos, t);
+    controls.target.lerpVectors(cameraMove.fromTarget, cameraMove.toTarget, t);
+
+    if (t === 1) cameraMove.active = false;
+  }
+
+  // update shader time uniform for cell materials
+  const nowSec = performance.now() / 1000;
+  for (const m of _cellMaterials) {
+    if (m.uniforms && m.uniforms.uTime) m.uniforms.uTime.value = nowSec;
+    if (m.uniforms && m.uniforms.uLightDir) m.uniforms.uLightDir.value.set(Math.sin(nowSec) * 0.2, 1.0, 0.8);
+  }
+
+  // update heightmap plane time
+  if (window.hmUniforms) {
+    window.hmUniforms.uTime.value = nowSec;
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+// --- Resize ---
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// --- Debug Camera Position ---
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'c' || event.key === 'C') {
+    console.log("Camera position:", camera.position);
+    console.log("Controls target:", controls.target);
+  }
+});
+</script>
+</body>
+</html>

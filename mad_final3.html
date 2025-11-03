@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Load GLB</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/dat.gui@0.7.7/build/dat.gui.min.js"></script>
+</head>
+
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/EXRLoader.js"></script>
+
+    <script>
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        const scene = new THREE.Scene();
+
+        // โหลด EXR environment
+        const exrLoader = new THREE.EXRLoader();
+        exrLoader.load('https://aomphatch.github.io/madWork/docklands_01_1k.exr', (texture) => {
+            texture.mapping = THREE.EquirectangularReflectionMapping;
+            scene.background = texture;
+            scene.environment = texture;
+        });
+
+        // กล้อง
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 2, 5);
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+        // แสง
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(5, 7, -3);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.set(1024, 1024);
+        directionalLight.shadow.camera.near = 0.5;
+        directionalLight.shadow.camera.far = 100;
+        directionalLight.shadow.camera.left = -5;
+        directionalLight.shadow.camera.right = 5;
+        directionalLight.shadow.camera.top = 5;
+        directionalLight.shadow.camera.bottom = -5;
+        scene.add(directionalLight);
+        scene.add(new THREE.DirectionalLightHelper(directionalLight, 1));
+
+        // GUI
+        const gui = new dat.GUI();
+        const lightSettings = {
+            lightX: directionalLight.position.x,
+            lightY: directionalLight.position.y,
+            lightZ: directionalLight.position.z,
+            lightIntensity: directionalLight.intensity,
+            exposure: renderer.toneMappingExposure
+        };
+        const lightFolder = gui.addFolder('Directional Light');
+        lightFolder.add(lightSettings, 'lightX', -10, 10).onChange(v => directionalLight.position.x = v);
+        lightFolder.add(lightSettings, 'lightY', 0, 15).onChange(v => directionalLight.position.y = v);
+        lightFolder.add(lightSettings, 'lightZ', -10, 10).onChange(v => directionalLight.position.z = v);
+        lightFolder.add(lightSettings, 'lightIntensity', 0, 5).onChange(v => directionalLight.intensity = v);
+        lightFolder.open();
+        gui.add(lightSettings, 'exposure', 0, 5).onChange(v => renderer.toneMappingExposure = v);
+
+        const gltfLoader = new THREE.GLTFLoader();
+        const url = 'https://aomphatch.github.io/madWork/mad_android.glb';
+
+        gltfLoader.load(
+            url,
+            (gltf) => {
+                const model = gltf.scene;
+                const pbrFolder = gui.addFolder("PBR"); // folder เดียวสำหรับทุก material
+                pbrFolder.open(); // เปิด folder ทันที
+
+                model.traverse((child) => {
+                    if (child.isMesh && child.material && child.material.isMeshStandardMaterial) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+
+                        const mat = child.material;
+                        const meshName = child.name || `Mesh ${child.id}`; // ถ้าไม่มีชื่อ ตั้งเป็น Mesh + id
+
+                        // สร้าง slider สำหรับ roughness และ metalness ภายใน folder "PBR"
+                        pbrFolder.add(mat, "roughness", 0, 1, 0.01).name(meshName + " Roughness");
+                        pbrFolder.add(mat, "metalness", 0, 1, 0.01).name(meshName + " Metalness");
+                    }
+                });
+
+                scene.add(model);
+                console.log("GLB loaded successfully");
+            },
+            undefined,
+            (error) => {
+                console.error("Error loading GLB:", error);
+            }
+        );
+
+        // พื้น
+        const floorTex = new THREE.TextureLoader().load('https://aomphatch.github.io/madWork/brick_wall_08_diff_1k.jpg', t => {
+            t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        });
+        const floor = new THREE.Mesh(
+            new THREE.PlaneGeometry(100, 100),
+            new THREE.MeshStandardMaterial({ map: floorTex })
+        );
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // Render loop
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+        animate();
+        
+    </script>
+</body>
+
+</html>

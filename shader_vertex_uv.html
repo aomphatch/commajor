@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <title>Vertex Displacement by Grayscale Texture • three.js r128</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>html,body{height:100%;margin:0} canvas{display:block}</style>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+<script>
+  // Scene / Camera / Renderer
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+
+  const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
+  camera.position.set(0, 0.9, 3.2);
+
+  const renderer = new THREE.WebGLRenderer({ antialias:true });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  document.body.appendChild(renderer.domElement);
+
+  new THREE.OrbitControls(camera, renderer.domElement);
+  const uniforms = { 
+    uTime: { value: 0.0 } ,
+    uHeight: { value: null } // texture ที่จะโหลดมา
+  };
+  // ---- Shaders (sample texture ใน vertex แล้วดัน pos.z) ----
+  const vert = `
+    uniform sampler2D uHeight;
+    uniform float uTime;
+
+    varying float vH;
+
+    void main(){
+      vec3 pos = position;
+      float h = texture2D(uHeight, uv).r; 
+      // ขยับเป็นคลื่นน้ำ: ใช้ sin(uTime + pos.x*factor + pos.y*factor)
+      float wave = sin(uTime + pos.x * 2.0 + pos.y * 2.5) * 0.15;
+
+    // รวม displacement จาก texture และคลื่นน้ำ
+      pos.z = pos.z + (h * 0.8) - (sin(uTime) * h * 0.4) + wave;
+
+      // ...existing code...
+      vH = h;
+      // ยุบเข้า-ออกตามความสูง (h)
+      float deform = sin(uTime) * h * 0.4;
+      pos.z = pos.z + (h * 0.8) - deform;
+      // vH = h;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+    }
+  `;
+  const frag = `
+    precision mediump float;
+    varying float vH;
+    void main(){
+      // ระบายสีตามความสูง: ดำ→น้ำเงิน→ฟ้า
+      //gl_FragColor = vec4(0.9*vH+0.5, 0.4*vH + 0.8, 1.0*vH + 0.1, 1.0);
+      gl_FragColor = vec4(vH, 1.0-vH, 0.0, 1.0);
+      /*
+      vec3 lowColor  = vec3(0.0, 1.0, 0.0); // เขียว
+      vec3 highColor = vec3(1.0, 0.0, 0.0); // แดง
+
+      vec3 color = mix(lowColor, highColor, vH);
+      gl_FragColor = vec4(color, 1.0); */
+    }
+  `;
+
+  // โหลด texture แล้วค่อยสร้าง geometry/material ให้สัดส่วนตรงกับรูป
+  //https://upload.wikimedia.org/wikipedia/commons/7/71/Black.png
+  //https://www.shutterstock.com/shutterstock/videos/3608118583/thumb/10.jpg?ip=x480
+  new THREE.TextureLoader().load('https://www.shutterstock.com/image-illustration/rwanda-isolated-relief-map-3d-260nw-2572540453.jpg', (tex) => {
+
+    uniforms.uHeight.value = tex;
+    const geo = new THREE.PlaneBufferGeometry(4, 3, 150, 150); //ยิ่งปรับ4, 2, น้อย, น้อย) ความละเอียดยิ่งลด
+    const mat = new THREE.ShaderMaterial({
+      vertexShader: vert,
+      fragmentShader: frag,
+      uniforms: uniforms,
+      //wireframe: true, // เปิดถ้าอยากดูเส้นตาราง
+      side: THREE.DoubleSide
+       
+    });
+
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(0,3,0);
+    scene.add(mesh);
+  });
+
+  // Resize & Render loop
+  addEventListener('resize', ()=>{
+    camera.aspect = innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  (function loop(){
+    uniforms.uTime.value += 0.05;
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  })();
+</script>
+</body>
+</html>
