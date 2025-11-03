@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>Regist</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <main>
+        <div class="login-page">
+            <div class="LoginContainer">
+                <h2>Sign Up</h2>
+                <form id="registForm">   <!--เปลี่ยนจาก action/method เป็น id -->
+                    <label>email</label>
+                    <input type="email" class="box" name="email" id="emailInput" required><br>  <!--เปลี่ยน type="text" เป็น type="email" และเพิ่ม id -->
+                    <label>username</label>
+                    <input type="text" class="box" name="username" id="usernameInput" required><br> <!--เพิ่ม id -->
+                    <label>password</label>
+                    <input type="password" class="box" name="password" id="passwordInput" required><br> <!--เพิ่ม id -->
+                    <button type="submit" class="submitbt" id="signupBtn">Sign Up</button>      <!--เพิ่ม id -->
+                </form>
+                
+                <div id="registMessage"></div>      <!--แสดงข้อความ -->
+            </div>
+        </div>
+    </main>
+    
+    <!--Modal  -->
+    <div id="verifyModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3>🔐 Verify OTP</h3>
+            <p>กรุณากรอกรหัส OTP<br>ที่ส่งไปยังอีเมลของคุณ</p>
+            <input type="text" id="verifyCode" placeholder="000000" maxlength="6"><br>
+            <button id="verifyBtn">Verify</button>
+            <div id="verifyMessage"></div>
+        </div>
+    </div>
+
+    <!--จัดการ OTP ทั้งหมด -->
+    <script>
+        let userEmail = '';
+
+        // จัดการฟอร์มสมัครสมาชิก
+        document.getElementById('registForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const btn = document.getElementById('signupBtn');
+            const message = document.getElementById('registMessage');
+            const formData = new FormData(e.target);
+            
+            userEmail = formData.get('email');
+            
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+            message.innerHTML = '';
+            
+            try {
+                const response = await fetch('/regist', {
+                    method: 'POST',
+                    body: new URLSearchParams(formData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    message.innerHTML = `<span class="success-message">✅ ${result.message}</span>`;
+                    
+                    setTimeout(() => {
+                        document.getElementById('verifyModal').style.display = 'block';
+                        document.getElementById('verifyCode').focus();
+                    }, 800);
+                } else {
+                    message.innerHTML = `<span class="error-message">❌ ${result.message}</span>`;
+                }
+            } catch (error) {
+                message.innerHTML = '<span class="error-message">❌ เกิดข้อผิดพลาด กรุณาลองใหม่</span>';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Sign Up';
+            }
+        });
+
+        // ปิด Modal
+        document.querySelector('.close').addEventListener('click', () => {
+            document.getElementById('verifyModal').style.display = 'none';
+        });
+
+        window.addEventListener('click', (e) => {
+            const modal = document.getElementById('verifyModal');
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+
+        // ยืนยัน OTP
+        document.getElementById('verifyBtn').addEventListener('click', async () => {
+            const otp = document.getElementById('verifyCode').value.trim();
+            const btn = document.getElementById('verifyBtn');
+            const message = document.getElementById('verifyMessage');
+            
+            if (otp.length !== 6) {
+                message.innerHTML = '<span class="error-message">กรุณากรอก OTP 6 หลัก</span>';
+                return;
+            }
+            
+            btn.disabled = true;
+            btn.textContent = 'Verifying...';
+            message.innerHTML = '';
+            
+            try {
+                const response = await fetch('/verify', {
+                    method: 'POST',
+                    body: new URLSearchParams({
+                        email: userEmail,
+                        otp: otp
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    message.innerHTML = `<span class="success-message">✅ ${result.message}</span>`;
+                    
+                    setTimeout(() => {
+                        window.location.href = '/login';
+                    }, 1500);
+                } else {
+                    message.innerHTML = `<span class="error-message">❌ ${result.message}</span>`;
+                    btn.disabled = false;
+                    btn.textContent = 'Verify';
+                }
+            } catch (error) {
+                message.innerHTML = '<span class="error-message">❌ เกิดข้อผิดพลาด</span>';
+                btn.disabled = false;
+                btn.textContent = 'Verify';
+            }
+        });
+
+        // กรอกได้เฉพาะตัวเลข
+        document.getElementById('verifyCode').addEventListener('input', (e) => {
+            e.target.value = e.target.value.replace(/[^0-9]/g, '');
+        });
+
+        // กด Enter เพื่อยืนยัน
+        document.getElementById('verifyCode').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('verifyBtn').click();
+            }
+        });
+    </script>
+
+    <script src="/main.js"></script>
+</body>
+</html>
