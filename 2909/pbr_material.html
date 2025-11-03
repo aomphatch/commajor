@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <title>Step 03 – MeshStandardMaterial (PBR, no GUI) • three.js r128</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>html,body{height:100%;margin:0} canvas{display:block}</style>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+</head>
+<body>
+<script>
+
+
+  // Scene / Camera / Renderer
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+
+  const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 100);
+  camera.position.set(0, 1.2, 3);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.shadowMap.enabled = true;
+  document.body.appendChild(renderer.domElement);
+
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+  // Lights
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x333333, 0.6);
+  scene.add(hemi);
+
+  const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+  dir.position.set(3, 5, 2);
+  dir.castShadow = true;
+  scene.add(dir);
+
+  // Ground
+  const ground = new THREE.Mesh(
+    new THREE.PlaneBufferGeometry(10, 10),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0.0 })
+  );
+  ground.rotation.x = -Math.PI/2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // Environment map (cube) สำหรับ reflection ของ PBR
+  const cubeUrls = [
+    'https://threejs.org/examples/textures/cube/Bridge2/posx.jpg',
+    'https://threejs.org/examples/textures/cube/Bridge2/negx.jpg',
+    'https://threejs.org/examples/textures/cube/Bridge2/posy.jpg',
+    'https://threejs.org/examples/textures/cube/Bridge2/negy.jpg',
+    'https://threejs.org/examples/textures/cube/Bridge2/posz.jpg',
+    'https://threejs.org/examples/textures/cube/Bridge2/negz.jpg'
+  ];
+  const envMap = new THREE.CubeTextureLoader().load(cubeUrls);
+  envMap.encoding = THREE.sRGBEncoding;
+  scene.environment = envMap; // IBL
+
+  // Geometry + PBR Material
+  const geo = new THREE.SphereBufferGeometry(0.65, 64, 64); // ทรงกลมทำให้เห็น reflection ชัด
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,  // สีฐาน
+    metalness: 0.9,  // 0 = non-metal, 1 = metal
+    roughness:  0.1,  // 0 = เรียบเงา, 1 = ด้าน
+    envMap: envMap, // ใส่ที่วัสดุเพื่อใช้ envMapIntensity
+    envMapIntensity:  1.0 // ความเข้มของแสงสะท้อนจาก env map
+  });
+  const ball = new THREE.Mesh(geo, mat);
+  ball.position.y = 0.7;
+  ball.castShadow = true;
+  scene.add(ball);
+
+    // --- OBJ + MTL Loader ---
+  const mtlLoader = new THREE.MTLLoader();
+  mtlLoader.setPath('https://threejs.org/examples/models/obj/male02/'); // เปลี่ยน path ตามไฟล์ของคุณ
+  mtlLoader.load('male02.mtl', function(materials) {
+    materials.preload();
+
+    const objLoader = new THREE.OBJLoader();
+    objLoader.setMaterials(materials);
+    objLoader.setPath('https://threejs.org/examples/models/obj/male02/'); // เปลี่ยน path ตามไฟล์ของคุณ
+    objLoader.load('male02.obj', function(object) {
+      object.position.set(1.5, 0, 0); // ขยับโมเดลไปข้างๆลูกบอล
+      object.scale.set(0.02, 0.02, 0.02); // ปรับขนาดถ้าใหญ่เกินไป
+      object.traverse(function(child) {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+      scene.add(object);
+    });
+  });
+
+  // Resize
+  addEventListener('resize', ()=>{
+    camera.aspect = innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  // Animate
+  let t = 0;
+  (function loop(){
+    t += 0.01;
+    ball.rotation.y += 0.01;
+    dir.position.x = 3 + Math.sin(t) * 1.0; // ขยับไฟนิดหน่อยให้ไฮไลต์เปลี่ยน
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  })();
+</script>
+</body>
+</html>
