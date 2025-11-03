@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Happy Birthday!</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f0f8ff; /* Light blue background */
+            color: #333; /* Dark gray text */
+            padding-top: 50px;
+            overflow: hidden; /* Prevent scrollbar from animation */
+        }
+        
+        /* Animation for the heading */
+        @keyframes bounceIn {
+            0% {
+                transform: scale(0.1);
+                opacity: 0;
+            }
+            60% {
+                transform: scale(1.2);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        h1 {
+            color: #ff69b4; /* Hot pink for the heading */
+            font-size: 3em;
+            margin-bottom: 20px;
+            animation: bounceIn 1s ease-out; /* Apply the animation */
+        }
+
+        /* Animation for the message box */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        p {
+            font-size: 1.2em;
+            line-height: 1.5;
+        }
+
+        .message {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            animation: fadeIn 1.5s ease-out 0.5s forwards; /* Apply the animation with a delay */
+            opacity: 0; /* Initially hide the element */
+        }
+
+        /* Confetti animation */
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: #ffd700; /* Gold */
+            animation: confetti-fall 3s linear infinite;
+        }
+
+        .confetti:nth-child(2n) { background-color: #ff4500; /* Orange */ }
+        .confetti:nth-child(3n) { background-color: #9acd32; /* Yellow-green */ }
+        .confetti:nth-child(4n) { background-color: #1e90ff; /* Dodger blue */ }
+        .confetti:nth-child(5n) { background-color: #ba55d3; /* Medium purple */ }
+
+        @keyframes confetti-fall {
+            0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="confetti" style="left: 10%; animation-delay: 0.2s;"></div>
+    <div class="confetti" style="left: 25%; animation-delay: 1s;"></div>
+    <div class="confetti" style="left: 40%; animation-delay: 0.5s;"></div>
+    <div class="confetti" style="left: 55%; animation-delay: 1.5s;"></div>
+    <div class="confetti" style="left: 70%; animation-delay: 0.8s;"></div>
+    <div class="confetti" style="left: 85%; animation-delay: 1.2s;"></div>
+
+    <h1>Happy Birthday!</h1>
+    <div class="message">
+        <p>สุขสันต์วันเกิดนะออม</p>
+        <p>ในวันเกิดปีนี้ขอให้เป็นปีที่มีความสุขเป็นการเเติบโตที่มีแต่รอยยิ้ม</p>
+        <p>โลกนี้สดใสเมื่อมมีเธอนะ</p>
+    </div>
+</body>
+</html>

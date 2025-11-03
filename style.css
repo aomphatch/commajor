@@ -1,63 +1,22 @@
-/* ตั้งค่าพื้นฐานของ navbar */
-
-/*ตกแต่ง nvabar in index.html*/
-.navbar {
-  background-color: #13244d;   /* สีพื้นหลัง */
-  overflow: hidden;         /* ซ่อน overflow */
-  display: flex;            /* จัดเรียงแนวนอน */
-  justify-content: flex-start; /* เริ่มจากซ้าย */
-  padding: 20px 15px;          /* เว้นขอบซ้ายขวา */
-  font-family: Arial;
-  font-size: 20px;
-  font-weight: bold;
-  gap: 15px;
+html,body {
+    height: 100%; /* ให้เต็มหน้าจอ */
+    margin: 0;    /* ลบ margin เริ่มต้น */
+    display: flex; 
+    justify-content: center; /* จัด main แนวนอนกลาง */
+    align-items: center;     /* จัด main แนวตั้งกลาง */
+    background-color: rgb(254, 235, 241);
 }
-
-/*ตกแต่ง content in navbar*/
-.nav-links a {
-    font-family: 'Arial', sans-serif; /* ฟอนต์ */
-    font-size: 20px;                  /* ขนาดตัวอักษร */
-    font-weight: bold;                /* หนา */
-    color: white;
-    padding: 5px 10px;                /* ขนาดปุ่ม */
-    transition: background 0.3s, transform 0.2s; /* smooth effect */ 
-}
-.nav-links a:hover {
-    background: #dbd07e;
-    border-radius: 5px;
-}
-.nav-links a.active {
-    background: #efbd49;
-    border-radius: 5px;
-}
-
-.auth-links a {
-    font-family: 'Arial', sans-serif; /* ฟอนต์ */
-    font-size: 13px;                  /* ขนาดตัวอักษร */
-    font-weight: lighter;                /* หนา */
-    color: #fff;                      /* สีตัวอักษร */
-    background-color: #84b8ed;        /* สีพื้นหลังปุ่ม */
-    padding: 6px 15px ;                /* ขนาดปุ่ม */
-    cursor: pointer;                  /* เป็น pointer เวลา hover */
-    transition: background 0.3s, transform 0.2s; /* smooth effect */ 
-}
-.auth-links {
-    margin-left: auto;   /*จัดให้ปุ่มในกลุ่ม auth เริ่มที่ฝั่งขวา*/
-}
-.auth-links a:hover {
-    background: #45f2b8;
-    color: #000000;
-    border-radius: 5px;
-}
-
-/*login style*/
-.login-page {
+main{
     display: flex;
-    justify-content: center;   /* กึ่งกลางแนวนอน */
-    align-items: center;       /* กึ่งกลางแนวตั้ง */
-    height: 100vh;             /* ให้สูงเต็มหน้าจอ */
-    background-color: #f0f0f0; /* สีพื้นหลังเฉพาะหน้า login */
+    flex-direction: column;
+    justify-content: center; 
+    align-items: center;
+    width : 100%;
+    height : 50%;
+
+    
 }
+ 
 .LoginContainer {
     width : 400px;
     height : 400px;
@@ -84,151 +43,15 @@
     font-weight: bold;
 }
 
-/*Account style*/
-.account {
-    display: flex;
-    justify-content: center;   /* กึ่งกลางแนวนอน */
-    align-items: center;       /* กึ่งกลางแนวตั้ง */
-    width : 300px;
-    height : 100px;
+.home {
+    width : 600px;
+    height : 400px;
     font-family: Arial;
-    font-size: 40px;
+    font-size: 18px;
     font-weight: bold;
-    background-color: burlywood;
 }
 /* .test {
     width : 40%;
     height : 50%;
     background-color: aqua;
 } */
-
-/*Home style*/
-body {
-    background-color: rgb(182, 217, 255);
-}
-
-
-/* ========== OTP Modal Styles ========== */
-.modal {
-    display: none;
-    position: fixed;
-    z-index: 1000;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.6);
-    animation: fadeIn 0.3s;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
-
-.modal-content {
-    background-color: #fff7c8;
-    margin: 10% auto;
-    padding: 30px;
-    border: 2px solid rgb(231, 99, 99);
-    border-radius: 10px;
-    width: 90%;
-    max-width: 400px;
-    font-family: Arial;
-    text-align: center;
-    animation: slideDown 0.3s;
-}
-
-@keyframes slideDown {
-    from {
-        transform: translateY(-50px);
-        opacity: 0;
-    }
-    to {
-        transform: translateY(0);
-        opacity: 1;
-    }
-}
-
-.close {
-    color: #aaa;
-    float: right;
-    font-size: 28px;
-    font-weight: bold;
-    cursor: pointer;
-    line-height: 20px;
-}
-
-.close:hover {
-    color: #000;
-}
-
-.modal-content h3 {
-    margin-top: 0;
-    font-size: 24px;
-    font-weight: bold;
-    color: #333;
-}
-
-.modal-content p {
-    font-size: 16px;
-    color: #666;
-    margin-bottom: 20px;
-}
-
-#verifyCode {
-    width: 200px;
-    height: 35px;
-    padding: 5px;
-    font-size: 24px;
-    text-align: center;
-    letter-spacing: 8px;
-    border: 2px solid #ddd;
-    border-radius: 5px;
-    margin-bottom: 20px;
-    font-weight: 600;
-}
-
-#verifyCode:focus {
-    outline: none;
-    border-color: #4CAF50;
-}
-
-#verifyBtn {
-    width: 120px;
-    height: 35px;
-    font-size: 16px;
-    font-weight: bold;
-    background: #4CAF50;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: background 0.3s;
-}
-
-#verifyBtn:hover {
-    background: #45a049;
-}
-
-#verifyBtn:disabled {
-    background: #ccc;
-    cursor: not-allowed;
-}
-
-.error-message {
-    color: #f44336;
-    font-size: 14px;
-    margin-top: 10px;
-}
-
-.success-message {
-    color: #4CAF50;
-    font-size: 14px;
-    margin-top: 10px;
-}
-
-#registMessage {
-    margin-top: 15px;
-    font-size: 14px;
-}
